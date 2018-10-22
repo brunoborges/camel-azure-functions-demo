@@ -3,13 +3,8 @@ Camel Java8 Router Project
 
 To build this project use
 
-    mvn install
+    mvn package
 
 To run this project from within Maven use
 
-    mvn exec:java
-
-For more help see the Apache Camel documentation
-
-    http://camel.apache.org/
-
+    mvn azure-functions:run
