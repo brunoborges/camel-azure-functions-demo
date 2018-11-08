@@ -1,37 +1,33 @@
+### HTTP Calls for Testing
+
+### Variables
+@local = http://localhost:7071
+@remote = https://camel-20180503110100788.azurewebsites.net
+@url = http://localhost:7071
+
 ### Call to upper case
-POST http://localhost:7071/api/upper HTTP/1.1
+POST {{url}}/api/upper HTTP/1.1
 
-poland
-
-### Call to remote
-
-POST https://camel-20180503110100788.azurewebsites.net/api/upper HTTP/1.1
-
-England
+netherlands
 
 ### Split message and send to Kafka
-POST http://localhost:7071/api/messageSplitter HTTP/1.1
+POST {{url}}/api/messageSplitter HTTP/1.1
 Content-Type: application/json
 Accept-Encoding: UTF-8
 Split-Pattern: $.codes[*]
-Destination: http://localhost:7071/api/queueOnKafka
+Destination: {{url}}/api/queueOnKafka
 Destination-Method: POST
 
 {
-    "codes": ["FOO", "BAR", "BEER", "WINE"]
+    "codes": ["NETHERLANDS", "AMSTERDAM", "UTRECHT", "AMHEIN"]
 }
 
-
-### Filter message
-
-
-
 ### Split message to Upper Case
-POST http://localhost:7071/api/messageSplitter HTTP/1.1
+POST {{url}}/api/messageSplitter HTTP/1.1
 Content-Type: application/json
 Accept-Encoding: UTF-8
 Split-Pattern: $.codes[*]
-Destination: http://localhost:7071/api/upper
+Destination: {{url}}/api/upper
 Destination-Method: POST
 
 {

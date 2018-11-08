@@ -34,14 +34,12 @@ public class CamelFunction {
         System.out.println("Starting camel...");
 
         // UPDATE WITH YOURS
-        String kafkaEndpoint = ""; // <something>.servicebus.windows.net
-        String sharedAccessKeyName = ""; // CHANGE ME
-        String sharedAccessKey = ""; // CHANGE ME
+        String connectionString = "";
 
         KafkaConfiguration kafkaConfig = new KafkaConfiguration();
         kafkaConfig.setBrokers("brborgeseventhub.servicebus.windows.net:9093");
-        kafkaConfig.setSaslJaasConfig("org.apache.kafka.common.security.plain.PlainLoginModule required username=\"$ConnectionString\" password=\"" +
-                "Endpoint=sb://"+kafkaEndpoint+".servicebus.windows.net/;SharedAccessKeyName="+sharedAccessKeyName+";SharedAccessKey="+sharedAccessKey+";");
+        kafkaConfig.setSaslJaasConfig(
+                "org.apache.kafka.common.security.plain.PlainLoginModule required username=\"$ConnectionString\" password=\"" + connectionString + "\";");
         kafkaConfig.setSaslMechanism("PLAIN");
         kafkaConfig.setSecurityProtocol("SASL_SSL");
 
@@ -53,87 +51,70 @@ public class CamelFunction {
 
         camelContext.addRoutes(new RouteBuilder() {
             public void configure() {
-                from("direct:toUpperCase")
-                        .log("Message converted to UPPER case: ${body}")
-                        .process(e -> e.getOut().setBody(e.getIn().getBody().toString().toUpperCase()));
+                from("direct:toUpperCase").log("Message converted to UPPER case: ${body}").process(
+                        e -> e.getOut().setBody(e.getIn().getBody().toString().toUpperCase()));
 
-                from("direct:message-splitter")
-                        .convertBodyTo(String.class)
-                        .choice()
-                            .when(header("Content-Type").isEqualTo("application/json"))
-                                .to("direct:json-splitter")
-                            .when(header("Content-Type").isEqualTo("application/xml"))
-                                .to("direct:xml-splitter")
-                            .when(header("Content-Type").isEqualTo("plain/text"))
-                                .to("direct:text-splitter")
-                            //.when(header("Content-Type").isEqualTo("text/csv"))
-                            //    .to("direct:csv-splitter")
-                            .otherwise()
-                                .to("direct:no-splitter")
-                        .end();
+                from("direct:message-splitter").convertBodyTo(String.class).choice()
+                        .when(header("Content-Type").isEqualTo("application/json"))
+                        .to("direct:json-splitter")
+                        .when(header("Content-Type").isEqualTo("application/xml"))
+                        .to("direct:xml-splitter")
+                        .when(header("Content-Type").isEqualTo("plain/text"))
+                        .to("direct:text-splitter")
+                        // .when(header("Content-Type").isEqualTo("text/csv"))
+                        // .to("direct:csv-splitter")
+                        .otherwise().to("direct:no-splitter").end();
 
-                from("direct:dispatch")
-                        .log("Dispatching the following message: ${body}")
+                from("direct:dispatch").log("Dispatching the following message: ${body}")
                         .setHeader(Exchange.HTTP_URI, header("Destination").getExpression())
-                        .setHeader(Exchange.HTTP_METHOD, header("Destination-Method").getExpression())
+                        .setHeader(Exchange.HTTP_METHOD,
+                                header("Destination-Method").getExpression())
                         .to("http4://mock.address");
 
-                from("direct:json-splitter")
-                        .log("Split by JSON Array Element")
-                        //.marshal().json()
-                        .log("${body}")
-                        .split()
-                            .jsonpathWriteAsString("${header.Split-Pattern}", false)
-                            .streaming()
-                            .to("direct:dispatch");
-
-                from("direct:xml-splitter")
-                        .log("Split by XML Element")
-                        .split()
-                            .xpath("${header.Split-Pattern}")
-                        .log("${body}")
+                from("direct:json-splitter").log("Split by JSON Array Element")
+                        // .marshal().json()
+                        .log("${body}").split()
+                        .jsonpathWriteAsString("${header.Split-Pattern}", false).streaming()
                         .to("direct:dispatch");
 
-                from("direct:text-splitter")
-                        .log("Split by plain text regular expression")
-                        .split()
-                            .simple("${header.Split-Pattern}")
-                        .to("direct:dispatch");
+                from("direct:xml-splitter").log("Split by XML Element").split()
+                        .xpath("${header.Split-Pattern}").log("${body}").to("direct:dispatch");
+
+                from("direct:text-splitter").log("Split by plain text regular expression").split()
+                        .simple("${header.Split-Pattern}").to("direct:dispatch");
 
                 /*
-                from("direct:csv-splitter")
-                        .log("Split by CSV line")
-                        .split(body().tokenize("\n"))
-                        .end();
-                */
+                 * from("direct:csv-splitter") .log("Split by CSV line")
+                 * .split(body().tokenize("\n")) .end();
+                 */
 
-                from("direct:no-splitter")
-                        .to("direct:dispatch");
+                from("direct:no-splitter").to("direct:dispatch");
 
                 /*
-                from("direct:message-filter")
-                        .filter();
+                 * from("direct:message-filter") .filter();
                  */
 
                 from("direct:queueOnKafka")
-                        .log("${body}")
-                        .convertBodyTo(String.class)
-                        .process(exchange -> {
-                            exchange.getIn().setHeader(PARTITION_KEY, 0);
-                            exchange.getIn().setHeader(KEY, Integer.toString(new Random().nextInt(100)));
-                        }).to("kafka:messages");
+                    .log("${body}")
+                    .convertBodyTo(String.class)
+                    .process(exchange -> {
+                        exchange.getIn().setHeader(PARTITION_KEY, 0);
+                        exchange.getIn().setHeader(KEY, Integer.toString(new Random().nextInt(100)));
+                        })
+                    .to("kafka:messages");
 
             }
         });
         camelContext.start();
+        camelContext.startAllRoutes();
 
         producer = new DefaultProducerTemplate(camelContext);
         producer.start();
     }
 
     @FunctionName("upper")
-    public HttpResponseMessage upper(
-            @HttpTrigger(name = "req", methods = {HttpMethod.POST}, authLevel = AuthorizationLevel.ANONYMOUS) HttpRequestMessage<Optional<String>> request,
+    public HttpResponseMessage upper(@HttpTrigger(name = "req", methods = {HttpMethod.POST},
+            authLevel = AuthorizationLevel.ANONYMOUS) HttpRequestMessage<Optional<String>> request,
             final ExecutionContext context) throws Exception {
 
         String body = request.getBody().orElse(request.getQueryParameters().get("body"));
@@ -142,53 +123,53 @@ public class CamelFunction {
         String outMessage = out.getOut().getBody().toString();
         System.out.println("Message converted: " + outMessage);
 
-        return request.createResponseBuilder(HttpStatus.OK).body("Camel returned: " + outMessage).build();
+        return request.createResponseBuilder(HttpStatus.OK).body("Camel returned: " + outMessage)
+                .build();
     }
 
     @FunctionName("queueOnKafka")
-    public HttpResponseMessage queueOnKafka(
-            @HttpTrigger(name = "req", methods = {HttpMethod.POST}, authLevel = AuthorizationLevel.ANONYMOUS) HttpRequestMessage<Optional<String>> request,
+    public HttpResponseMessage queueOnKafka(@HttpTrigger(name = "req", methods = {HttpMethod.POST},
+            authLevel = AuthorizationLevel.ANONYMOUS) HttpRequestMessage<Optional<String>> request,
             final ExecutionContext context) throws Exception {
 
         String body = request.getBody().orElse("MISSING VALUE");
         Exchange exchange = ExchangeBuilder.anExchange(camelContext).withBody(body).build();
         Exchange out = producer.send("direct:queueOnKafka", exchange);
 
-        return request.createResponseBuilder(HttpStatus.OK).body("Camel returned: " + out.getOut().getBody()).build();
+        return request.createResponseBuilder(HttpStatus.OK)
+                .body("Camel returned: " + out.getOut().getBody()).build();
     }
 
     @FunctionName("messageSplitter")
-    public HttpResponseMessage messageSplitter(
-            @HttpTrigger(name = "req", methods = {HttpMethod.GET, HttpMethod.POST}, authLevel = AuthorizationLevel.ANONYMOUS) HttpRequestMessage<Optional<String>> request,
+    public HttpResponseMessage messageSplitter(@HttpTrigger(name = "req",
+            methods = {HttpMethod.GET, HttpMethod.POST},
+            authLevel = AuthorizationLevel.ANONYMOUS) HttpRequestMessage<Optional<String>> request,
             final ExecutionContext context) throws Exception {
 
         String body = request.getBody().orElse(request.getQueryParameters().get("body"));
-        Exchange exchange = ExchangeBuilder
-                .anExchange(camelContext)
-                .withBody(body)
-                .build();
+        Exchange exchange = ExchangeBuilder.anExchange(camelContext).withBody(body).build();
 
         request.getHeaders().forEach((k, v) -> exchange.getIn().setHeader(k, v));
 
         producer.asyncSend("direct:message-splitter", exchange);
 
-        return request.createResponseBuilder(HttpStatus.OK).body("Message received. Check logs.").build();
+        return request.createResponseBuilder(HttpStatus.OK).body("Message received. Check logs.")
+                .build();
     }
 
     @FunctionName("messageFilter")
-    public HttpResponseMessage messageFilter(
-            @HttpTrigger(name = "req", methods = {HttpMethod.GET, HttpMethod.POST}, authLevel = AuthorizationLevel.ANONYMOUS) HttpRequestMessage<Optional<String>> request,
+    public HttpResponseMessage messageFilter(@HttpTrigger(name = "req",
+            methods = {HttpMethod.GET, HttpMethod.POST},
+            authLevel = AuthorizationLevel.ANONYMOUS) HttpRequestMessage<Optional<String>> request,
             final ExecutionContext context) throws Exception {
 
         String body = request.getBody().orElse(request.getQueryParameters().get("body"));
-        Exchange exchange = ExchangeBuilder
-                .anExchange(camelContext)
-                .withBody(body)
-                .withHeader("filter-pattern", request.getHeaders().get("filter-pattern"))
-                .build();
+        Exchange exchange = ExchangeBuilder.anExchange(camelContext).withBody(body)
+                .withHeader("filter-pattern", request.getHeaders().get("filter-pattern")).build();
 
         Exchange out = producer.send("direct:message-filter", exchange);
 
-        return request.createResponseBuilder(HttpStatus.OK).body(out.getOut().getBody(String.class)).build();
+        return request.createResponseBuilder(HttpStatus.OK).body(out.getOut().getBody(String.class))
+                .build();
     }
 }
